@@ -292,7 +292,7 @@ def install_systemd_units(dry_run: bool, force: bool) -> None:
 
 
 def start_ghost(ghost_compose_path: str, dry_run: bool) -> None:
-    compose_file = Path(ghost_compose_path) / "docker-compose.yml"
+    compose_file = Path(ghost_compose_path) / "compose.yml"
     run_cmd(
         ["docker", "compose", "-f", str(compose_file), "up", "-d", "--remove-orphans"],
         dry_run=dry_run,
@@ -484,6 +484,12 @@ def main() -> None:
     create_cert_deployer_user(args.dry_run)
     install_sudoers_rule(args.dry_run)
     create_wolfcraig_venv(args.dry_run)
+    venv_python = WOLFCRAIG_VENV / "bin" / "python3"
+    already_in_venv = Path(sys.executable).resolve() == venv_python.resolve()
+    if not args.dry_run and venv_python.exists() and not already_in_venv:
+        log.info("Re-execing with venv Python for dependency access")
+        os.execv(str(venv_python), [str(venv_python)] + sys.argv)  # noqa: S606
+
     configure_exim(config, args.dry_run, args.force)
     generate_dkim_keys(config, args.dry_run, args.force)
     install_systemd_units(args.dry_run, args.force)
