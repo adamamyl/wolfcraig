@@ -45,5 +45,8 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/*.py" = ["S101"]  # assert is expected in pytest
 
+[tool.setuptools.packages.find]
+include = ["lib*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
