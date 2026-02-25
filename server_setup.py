@@ -59,6 +59,7 @@ def run_cmd(cmd: list[str], *, dry_run: bool, **kwargs: object) -> subprocess.Co
 
 def load_and_validate_config() -> dict[str, object]:
     config = json.loads(DOMAINS_JSON.read_text())
+    config.pop("$schema", None)  # IDE tooling hint, not part of the data model
     schema = json.loads(DOMAINS_SCHEMA.read_text())
     jsonschema.validate(config, schema)
     log.info("Config validated OK")
