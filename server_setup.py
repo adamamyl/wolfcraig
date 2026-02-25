@@ -9,7 +9,6 @@ import shutil
 import smtplib
 import subprocess
 import sys
-import tempfile
 from email.message import EmailMessage
 from pathlib import Path
 from string import Template
@@ -171,13 +170,13 @@ def _stamp_template(template_path: Path, variables: dict[str, str]) -> str:
     return Template(template_path.read_text()).substitute(variables)
 
 
-def _validate_exim_config(config_text: str, tmp_path: Path) -> bool:
-    tmp_path.write_text(config_text)
-    result = subprocess.run(
-        ["exim", "-bV", "-C", str(tmp_path)],
-        capture_output=True,
-        text=True,
-    )
+def _validate_assembled_exim_config() -> bool:
+    """Assemble conf.d fragments and validate the resulting full config."""
+    assemble = subprocess.run(["update-exim4.conf"], capture_output=True, text=True)
+    if assemble.returncode != 0:
+        log.error("update-exim4.conf failed:\n%s", assemble.stderr)
+        return False
+    result = subprocess.run(["exim4", "-bV"], capture_output=True, text=True)
     if result.returncode != 0:
         log.error("Exim config validation failed:\n%s", result.stderr)
         return False
@@ -234,14 +233,6 @@ def configure_exim(config: dict[str, object], dry_run: bool, force: bool) -> Non
                 log.debug("Exim config unchanged: %s", dst)
                 continue
 
-        with tempfile.NamedTemporaryFile(delete=False) as tf:
-            tmp = Path(tf.name)
-        valid = _validate_exim_config(stamped, tmp)
-        tmp.unlink(missing_ok=True)
-        if not valid:
-            log.error("Aborting: invalid Exim config for %s", tpl_name)
-            sys.exit(1)
-
         log.info("Installing exim config: %s", dst)
         if not dry_run:
             dst.parent.mkdir(parents=True, exist_ok=True)
@@ -251,10 +242,14 @@ def configure_exim(config: dict[str, object], dry_run: bool, force: bool) -> Non
             log.info("[dry-run] would write %s", dst)
         changed = True
 
-    if changed:
-        log.info(
-            "Exim config updated — run 'update-exim4.conf && invoke-rc.d exim4 restart' to apply"
-        )
+    if changed and not dry_run:
+        if not _validate_assembled_exim_config():
+            log.error("Aborting: assembled Exim config is invalid")
+            sys.exit(1)
+        subprocess.run(["invoke-rc.d", "exim4", "restart"], check=True)
+        log.info("Exim restarted with new config")
+    elif changed:
+        log.info("[dry-run] would run update-exim4.conf and restart exim4")
 
 
 def generate_dkim_keys(config: dict[str, object], dry_run: bool, force: bool) -> None:
