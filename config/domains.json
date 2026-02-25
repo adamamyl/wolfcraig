@@ -1,0 +1,22 @@
+{
+  "$schema": "./domains.schema.json",
+  "ghost_compose_path": "/usr/local/src/ghost-docker",
+  "domains": [
+    {
+      "domain": "amyl.org.uk",
+      "mail": true,
+      "web": true,
+      "ghost": false,
+      "mailsubdomain": true,
+      "dns_management": "manual"
+    },
+    {
+      "domain": "securitysaysyes.com",
+      "mail": true,
+      "web": true,
+      "ghost": true,
+      "mailsubdomain": true,
+      "dns_management": "gcp"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+exim/dkim/*/private.key
+exim/dkim/*/public.key
+logs/
+.claude/
+organize
+old_plan.md

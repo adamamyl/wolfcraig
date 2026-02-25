@@ -1,0 +1,22 @@
+{
+  "$schema": "../config/domains.schema.json",
+  "ghost_compose_path": "/tmp/ghost-docker",
+  "domains": [
+    {
+      "domain": "mail.example.test",
+      "mail": true,
+      "web": true,
+      "ghost": false,
+      "mailsubdomain": false,
+      "dns_management": "manual"
+    },
+    {
+      "domain": "other.example.test",
+      "mail": true,
+      "web": true,
+      "ghost": true,
+      "mailsubdomain": true,
+      "dns_management": "gcp"
+    }
+  ]
+}

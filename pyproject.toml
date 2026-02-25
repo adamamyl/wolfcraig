@@ -1,0 +1,49 @@
+[project]
+name = "wolfcraig"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "jsonschema",
+    "dnspython",
+    "cryptography",
+    "docker",
+    "google-cloud-dns",
+    "google-auth",
+]
+
+[dependency-groups]
+dev = [
+    "bandit",
+    "mypy",
+    "ruff",
+    "pytest",
+    "pre-commit",
+    "types-jsonschema",
+]
+
+[tool.bandit]
+targets = ["."]
+exclude_dirs = [".venv", "tests/fixtures"]
+skips = []
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+exclude = ["tests/fixtures"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "S"]
+ignore = [
+    "S603",  # subprocess calls with list args are safe
+    "S607",  # starting a process with a partial path
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["S101"]  # assert is expected in pytest
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,13 @@
+mail.amyl.org.uk {
+    respond "." 200
+}
+
+mta-sts.amyl.org.uk {
+    handle /.well-known/mta-sts.txt {
+        respond `version: STSv1
+mode: enforce
+mx: mail.amyl.org.uk.
+max_age: 86400` 200
+    }
+    respond 404
+}
