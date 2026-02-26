@@ -1860,3 +1860,12 @@ Both:
 - [x] README: How to verify DKIM/SPF/DMARC
 - [x] README: Secrets and what lives where
 - [ ] Update machine-setup README with `--wolfcraig` flag  *(server)*
+
+---
+
+## Future improvements
+
+- [ ] Add AAAA records for `mta-sts.$DOMAIN` — currently only A (IPv4) is created. Caddy
+      will acquire the cert over IPv4 but an AAAA record would allow IPv6 senders to reach
+      the MTA-STS policy endpoint directly. Requires updating `build_records_for_domain()`
+      in `lib/gcp_dns.py` and the manual DNS checklist in `lib/dns_check.py`.
