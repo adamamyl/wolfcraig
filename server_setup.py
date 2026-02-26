@@ -354,7 +354,12 @@ def sync_dns(config: dict[str, object], dry_run: bool) -> None:
             try:
                 server_ipv4 = get_public_ipv4()
                 server_ipv6 = get_public_ipv6()
-                result = dns_check.check_domain(entry, server_ipv4, server_ipv6)
+                dkim_b64 = _read_dkim_b64(domain)
+                result = dns_check.check_domain(
+                    entry, server_ipv4, server_ipv6,
+                    dkim_public_key_b64=dkim_b64,
+                    mta_sts_id=mta_sts_id,
+                )
                 manual_results.append(result)
             except RuntimeError as exc:
                 log.warning("Could not determine server IPs for DNS check: %s", exc)
@@ -378,11 +383,15 @@ def check_dns(config: dict[str, object]) -> None:
     if not isinstance(domains_list, list):
         return
 
-    results = [
-        dns_check.check_domain(entry, server_ipv4, server_ipv6)
-        for entry in domains_list
-        if isinstance(entry, dict)
-    ]
+    sts_id = _mta_sts_id()
+    results = []
+    for entry in domains_list:
+        if not isinstance(entry, dict):
+            continue
+        dkim_b64 = _read_dkim_b64(str(entry["domain"]))
+        results.append(
+            dns_check.check_domain(entry, server_ipv4, server_ipv6, dkim_b64, sts_id)
+        )
     dns_check.print_results(results)
 
     if any(not r.all_ok for r in results):

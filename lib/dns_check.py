@@ -69,6 +69,8 @@ def check_domain(
     domain_config: dict[str, object],
     server_ipv4: str,
     server_ipv6: str,
+    dkim_public_key_b64: str | None = None,
+    mta_sts_id: str | None = None,
 ) -> DomainCheckResult:
     domain = str(domain_config["domain"])
     mailsubdomain = bool(domain_config.get("mailsubdomain", True))
@@ -116,21 +118,35 @@ def check_domain(
 
         dkim_name = f"{DKIM_SELECTOR}._domainkey.{domain}"
         dkim_actual = _query_txt_prefix(dkim_name, "v=DKIM1")
+        dkim_expected = (
+            f"v=DKIM1; k=rsa; p={dkim_public_key_b64}"
+            if dkim_public_key_b64
+            else "v=DKIM1; k=rsa; p=<key>"
+        )
         result.records.append(
             RecordResult(
                 domain=domain,
                 record_type="TXT",
                 name=f"{dkim_name}.",
-                expected="v=DKIM1; k=rsa; p=<key>",
+                expected=dkim_expected,
                 actual=dkim_actual,
                 status=_txt_status(dkim_actual, "v=DKIM1"),
             )
         )
 
-        for prefix, rname in [
-            ("v=DMARC1", f"_dmarc.{domain}"),
-            ("v=STSv1", f"_mta-sts.{domain}"),
-            ("v=TLSRPTv1", f"_smtp._tls.{domain}"),
+        sts_id = mta_sts_id or "<id>"
+        for prefix, rname, expected_value in [
+            (
+                "v=DMARC1",
+                f"_dmarc.{domain}",
+                f"v=DMARC1; p=reject; pct=100; rua=mailto:dmarc@{domain}; adkim=s; aspf=s",
+            ),
+            ("v=STSv1", f"_mta-sts.{domain}", f"v=STSv1; id={sts_id}"),
+            (
+                "v=TLSRPTv1",
+                f"_smtp._tls.{domain}",
+                f"v=TLSRPTv1; rua=mailto:tls@{domain}",
+            ),
         ]:
             actual_txt = _query_txt_prefix(rname, prefix)
             result.records.append(
@@ -138,7 +154,7 @@ def check_domain(
                     domain=domain,
                     record_type="TXT",
                     name=f"{rname}.",
-                    expected=f"{prefix}; ...",
+                    expected=expected_value,
                     actual=actual_txt,
                     status=_txt_status(actual_txt, prefix),
                 )
