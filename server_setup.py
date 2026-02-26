@@ -5,6 +5,7 @@ import filecmp
 import json
 import logging
 import os
+import re
 import shutil
 import smtplib
 import subprocess
@@ -336,12 +337,22 @@ def configure_caddy(ghost_compose_path: str, dry_run: bool, force: bool) -> None
     # Ensure Caddyfile imports sites/
     if caddyfile.exists():
         content = caddyfile.read_text()
-        if marker not in content:
-            log.info("Adding site import to %s", caddyfile)
-            if not dry_run:
-                caddyfile.write_text(content.rstrip() + f"\n\n{marker_line}")
+        if marker_line not in content:
+            if marker in content:
+                # Marker present but import path is wrong — replace the old line
+                log.info("Updating site import path in %s", caddyfile)
+                new_content = re.sub(
+                    re.escape(marker) + r"\n[^\n]*\n",
+                    marker_line,
+                    content,
+                )
             else:
-                log.info("[dry-run] would append import to %s", caddyfile)
+                log.info("Adding site import to %s", caddyfile)
+                new_content = content.rstrip() + f"\n\n{marker_line}"
+            if not dry_run:
+                caddyfile.write_text(new_content)
+            else:
+                log.info("[dry-run] would update import in %s", caddyfile)
             changed = True
     else:
         log.warning("Caddyfile not found at %s — skipping import injection", caddyfile)
