@@ -254,19 +254,38 @@ def configure_exim(config: dict[str, object], dry_run: bool, force: bool) -> Non
             log.info("[dry-run] would write %s", dst)
         changed = True
 
-    # Ensure Exim can route to external domains (not blocked by Debian's 'nonlocal' router)
-    exim_conf_conf = Path("/etc/exim4/update-exim4.conf.conf")
-    if not dry_run and exim_conf_conf.exists():
-        content = exim_conf_conf.read_text()
-        new_content = re.sub(
-            r"dc_eximconfig_configtype='[^']*'",
-            "dc_eximconfig_configtype='internet'",
-            content,
-        )
-        if new_content != content:
-            exim_conf_conf.write_text(new_content)
-            log.info("Set dc_eximconfig_configtype='internet' in %s", exim_conf_conf)
-            changed = True
+    # Own update-exim4.conf.conf — single source of truth for generated options.
+    # local_interfaces, qualify_domain, log_selector are managed here (via Debian's
+    # conf.d generators), NOT in 00_wolfcraig_local_settings, to avoid duplicates.
+    exim_update_conf = Path("/etc/exim4/update-exim4.conf.conf")
+    update_conf_content = (
+        f"dc_eximconfig_configtype='internet'\n"
+        f"dc_other_hostnames='{primary_domain}'\n"
+        f"dc_local_interfaces='127.0.0.1 ; ::1 ; {relay_subnet}'\n"
+        f"dc_readhost=''\n"
+        f"dc_relay_domains=''\n"
+        f"dc_minimaldns='false'\n"
+        f"dc_relay_nets=''\n"
+        f"dc_smarthost=''\n"
+        f"CFILEMODE='644'\n"
+        f"dc_use_split_config='true'\n"
+    )
+    if dry_run:
+        log.info("[dry-run] would write %s", exim_update_conf)
+    elif not exim_update_conf.exists() or exim_update_conf.read_text() != update_conf_content:
+        exim_update_conf.write_text(update_conf_content)
+        log.info("Updated %s", exim_update_conf)
+        changed = True
+
+    # /etc/mailname is the source for qualify_domain via Debian's ETC_MAILNAME macro
+    mailname = Path("/etc/mailname")
+    desired_mailname = f"{primary_domain}\n"
+    if dry_run:
+        log.info("[dry-run] would set /etc/mailname to %s", primary_domain)
+    elif not mailname.exists() or mailname.read_text() != desired_mailname:
+        mailname.write_text(desired_mailname)
+        log.info("Set /etc/mailname to %s", primary_domain)
+        changed = True
 
     if changed and not dry_run:
         if not _validate_assembled_exim_config():
