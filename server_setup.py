@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import jsonschema
 
 from lib.constants import (
+    CADDY_SITES,
     CERT_DEPLOYER_USER,
     DKIM_SELECTOR,
     DOMAINS_JSON,
@@ -300,6 +301,77 @@ def start_ghost(ghost_compose_path: str, dry_run: bool) -> None:
     log.info("Ghost started")
 
 
+def configure_caddy(ghost_compose_path: str, dry_run: bool, force: bool) -> None:
+    """Install wolfcraig Caddy site configs and reload Caddy."""
+    caddy_dir = Path(ghost_compose_path) / "caddy"
+    sites_dst = caddy_dir / "sites"
+    caddyfile = caddy_dir / "Caddyfile"
+    import_line = "import caddy/sites/*\n"
+    marker = "# wolfcraig: import sites"
+    marker_line = f"{marker}\n{import_line}"
+
+    if not caddy_dir.exists():
+        log.warning("Caddy dir not found at %s — skipping Caddy config", caddy_dir)
+        return
+
+    changed = False
+
+    # Install wolfcraig site snippets
+    if not dry_run:
+        sites_dst.mkdir(exist_ok=True)
+
+    for src in sorted(CADDY_SITES.iterdir()):
+        dst = sites_dst / src.name
+        stamped = src.read_text()
+        if dst.exists() and not force and dst.read_text() == stamped:
+            log.debug("Caddy site unchanged: %s", dst)
+            continue
+        log.info("Installing Caddy site: %s", dst)
+        if not dry_run:
+            dst.write_text(stamped)
+        else:
+            log.info("[dry-run] would write %s", dst)
+        changed = True
+
+    # Ensure Caddyfile imports sites/
+    if caddyfile.exists():
+        content = caddyfile.read_text()
+        if marker not in content:
+            log.info("Adding site import to %s", caddyfile)
+            if not dry_run:
+                caddyfile.write_text(content.rstrip() + f"\n\n{marker_line}")
+            else:
+                log.info("[dry-run] would append import to %s", caddyfile)
+            changed = True
+    else:
+        log.warning("Caddyfile not found at %s — skipping import injection", caddyfile)
+
+    if changed and not dry_run:
+        compose_file = Path(ghost_compose_path) / "compose.yml"
+        result = subprocess.run(
+            [
+                "docker",
+                "compose",
+                "-f",
+                str(compose_file),
+                "exec",
+                "caddy",
+                "caddy",
+                "reload",
+                "--config",
+                "/etc/caddy/Caddyfile",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            log.info("Caddy reloaded with updated site configs")
+        else:
+            log.warning("Caddy reload failed (may need manual restart):\n%s", result.stderr)
+    elif changed:
+        log.info("[dry-run] would reload Caddy")
+
+
 def _read_dkim_b64(domain: str) -> str:
     from scripts.generate_dkim import get_public_key_b64
 
@@ -356,7 +428,9 @@ def sync_dns(config: dict[str, object], dry_run: bool) -> None:
                 server_ipv6 = get_public_ipv6()
                 dkim_b64 = _read_dkim_b64(domain)
                 result = dns_check.check_domain(
-                    entry, server_ipv4, server_ipv6,
+                    entry,
+                    server_ipv4,
+                    server_ipv6,
                     dkim_public_key_b64=dkim_b64,
                     mta_sts_id=mta_sts_id,
                 )
@@ -389,9 +463,7 @@ def check_dns(config: dict[str, object]) -> None:
         if not isinstance(entry, dict):
             continue
         dkim_b64 = _read_dkim_b64(str(entry["domain"]))
-        results.append(
-            dns_check.check_domain(entry, server_ipv4, server_ipv6, dkim_b64, sts_id)
-        )
+        results.append(dns_check.check_domain(entry, server_ipv4, server_ipv6, dkim_b64, sts_id))
     dns_check.print_results(results)
 
     if any(not r.all_ok for r in results):
@@ -497,6 +569,7 @@ def main() -> None:
     generate_dkim_keys(config, args.dry_run, args.force)
     install_systemd_units(args.dry_run, args.force)
     start_ghost(str(config["ghost_compose_path"]), args.dry_run)
+    configure_caddy(str(config["ghost_compose_path"]), args.dry_run, args.force)
     sync_dns(config, args.dry_run)
     check_dns(config)
     deploy_certs(args.dry_run, args.force)

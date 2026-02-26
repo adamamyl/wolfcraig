@@ -17,6 +17,7 @@ WOLFCRAIG_VENV = Path("/usr/local/lib/wolfcraig-venv")
 WOLFCRAIG_CONF_DIR = Path("/etc/wolfcraig")
 
 GHOST_COMPOSE = Path("/opt/ghost-docker/compose.yml")
+CADDY_SITES = REPO_ROOT / "caddy" / "sites"
 
 ACME_SUBPATH = "caddy/certificates/acme-v02.api.letsencrypt.org-directory"
 
