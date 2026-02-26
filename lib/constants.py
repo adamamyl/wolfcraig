@@ -16,7 +16,7 @@ SUDOERS_DIR = Path("/etc/sudoers.d")
 WOLFCRAIG_VENV = Path("/usr/local/lib/wolfcraig-venv")
 WOLFCRAIG_CONF_DIR = Path("/etc/wolfcraig")
 
-GHOST_COMPOSE = Path("/usr/local/src/ghost-docker/docker-compose.yml")
+GHOST_COMPOSE = Path("/opt/ghost-docker/compose.yml")
 
 ACME_SUBPATH = "caddy/certificates/acme-v02.api.letsencrypt.org-directory"
 

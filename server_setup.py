@@ -310,9 +310,9 @@ def _read_dkim_b64(domain: str) -> str:
 
 
 def _mta_sts_id() -> str:
-    import time
+    from datetime import date
 
-    return str(int(time.time()))
+    return date.today().strftime("%Y%m%d") + "01"
 
 
 def sync_dns(config: dict[str, object], dry_run: bool) -> None:

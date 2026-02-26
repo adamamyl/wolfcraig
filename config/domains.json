@@ -1,6 +1,6 @@
 {
   "$schema": "./domains.schema.json",
-  "ghost_compose_path": "/usr/local/src/ghost-docker",
+  "ghost_compose_path": "/opt/ghost-docker",
   "domains": [
     {
       "domain": "amyl.org.uk",
