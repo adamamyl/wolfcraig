@@ -5,6 +5,7 @@ import filecmp
 import json
 import logging
 import os
+import re
 import shutil
 import smtplib
 import subprocess
@@ -220,10 +221,20 @@ def configure_exim(config: dict[str, object], dry_run: bool, force: bool) -> Non
     template_map = {
         "00_local_settings.tpl": EXIM_CONF_D / "main" / "00_wolfcraig_local_settings",
         "30_smtp_outbound.tpl": EXIM_CONF_D / "transport" / "30_wolfcraig_smtp_outbound",
-        "200_send_outbound.tpl": EXIM_CONF_D / "router" / "200_wolfcraig_send_outbound",
+        # 099_ prefix ensures this router fires before Debian's 200_exim4-config_primary,
+        # which would otherwise win the alphabetical race and route without DKIM.
+        "200_send_outbound.tpl": EXIM_CONF_D / "router" / "099_wolfcraig_send_outbound",
     }
 
     changed = False
+
+    # Clean up old misnamed router file if present from a previous run
+    old_router = EXIM_CONF_D / "router" / "200_wolfcraig_send_outbound"
+    if not dry_run and old_router.exists():
+        old_router.unlink()
+        log.info("Removed stale router config: %s", old_router)
+        changed = True
+
     for tpl_name, dst in template_map.items():
         tpl_path = EXIM_TEMPLATES / tpl_name
         stamped = _stamp_template(tpl_path, variables)
@@ -241,6 +252,39 @@ def configure_exim(config: dict[str, object], dry_run: bool, force: bool) -> Non
             os.chmod(dst, 0o644)
         else:
             log.info("[dry-run] would write %s", dst)
+        changed = True
+
+    # Own update-exim4.conf.conf — single source of truth for generated options.
+    # local_interfaces, qualify_domain, log_selector are managed here (via Debian's
+    # conf.d generators), NOT in 00_wolfcraig_local_settings, to avoid duplicates.
+    exim_update_conf = Path("/etc/exim4/update-exim4.conf.conf")
+    update_conf_content = (
+        f"dc_eximconfig_configtype='internet'\n"
+        f"dc_other_hostnames='{primary_domain}'\n"
+        f"dc_local_interfaces='127.0.0.1 ; ::1 ; {relay_subnet}'\n"
+        f"dc_readhost=''\n"
+        f"dc_relay_domains=''\n"
+        f"dc_minimaldns='false'\n"
+        f"dc_relay_nets=''\n"
+        f"dc_smarthost=''\n"
+        f"CFILEMODE='644'\n"
+        f"dc_use_split_config='true'\n"
+    )
+    if dry_run:
+        log.info("[dry-run] would write %s", exim_update_conf)
+    elif not exim_update_conf.exists() or exim_update_conf.read_text() != update_conf_content:
+        exim_update_conf.write_text(update_conf_content)
+        log.info("Updated %s", exim_update_conf)
+        changed = True
+
+    # /etc/mailname is the source for qualify_domain via Debian's ETC_MAILNAME macro
+    mailname = Path("/etc/mailname")
+    desired_mailname = f"{primary_domain}\n"
+    if dry_run:
+        log.info("[dry-run] would set /etc/mailname to %s", primary_domain)
+    elif not mailname.exists() or mailname.read_text() != desired_mailname:
+        mailname.write_text(desired_mailname)
+        log.info("Set /etc/mailname to %s", primary_domain)
         changed = True
 
     if changed and not dry_run:
@@ -336,12 +380,22 @@ def configure_caddy(ghost_compose_path: str, dry_run: bool, force: bool) -> None
     # Ensure Caddyfile imports sites/
     if caddyfile.exists():
         content = caddyfile.read_text()
-        if marker not in content:
-            log.info("Adding site import to %s", caddyfile)
-            if not dry_run:
-                caddyfile.write_text(content.rstrip() + f"\n\n{marker_line}")
+        if marker_line not in content:
+            if marker in content:
+                # Marker present but import path is wrong — replace the old line
+                log.info("Updating site import path in %s", caddyfile)
+                new_content = re.sub(
+                    re.escape(marker) + r"\n[^\n]*\n",
+                    marker_line,
+                    content,
+                )
             else:
-                log.info("[dry-run] would append import to %s", caddyfile)
+                log.info("Adding site import to %s", caddyfile)
+                new_content = content.rstrip() + f"\n\n{marker_line}"
+            if not dry_run:
+                caddyfile.write_text(new_content)
+            else:
+                log.info("[dry-run] would update import in %s", caddyfile)
             changed = True
     else:
         log.warning("Caddyfile not found at %s — skipping import injection", caddyfile)
@@ -507,7 +561,7 @@ def send_test_emails(config: dict[str, object], dry_run: bool) -> None:
     for entry in mail_domains:
         domain = str(entry["domain"])
         from_addr = f"test@{domain}"
-        to_addr = f"test@{domain}"
+        to_addr = f"adam@{domain}"
 
         if dry_run:
             log.info("[dry-run] would send test email from %s", from_addr)
