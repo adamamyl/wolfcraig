@@ -254,6 +254,18 @@ def configure_exim(config: dict[str, object], dry_run: bool, force: bool) -> Non
             log.info("[dry-run] would write %s", dst)
         changed = True
 
+    # Write DKIM domain keymap — lsearch lookup untaints $sender_address_domain in transport.
+    # Exim 4.94+ treats header-derived values as tainted; file lookup results are trusted.
+    dkim_keymap = EXIM_DKIM / "keymap"
+    keymap_content = "".join(f"{d}: {d}\n" for d in mail_domains)
+    if dry_run:
+        log.info("[dry-run] would write %s", dkim_keymap)
+    elif not dkim_keymap.exists() or dkim_keymap.read_text() != keymap_content:
+        dkim_keymap.parent.mkdir(parents=True, exist_ok=True)
+        dkim_keymap.write_text(keymap_content)
+        log.info("Updated DKIM keymap: %s", dkim_keymap)
+        changed = True
+
     # Own update-exim4.conf.conf — single source of truth for generated options.
     # local_interfaces, qualify_domain, log_selector are managed here (via Debian's
     # conf.d generators), NOT in 00_wolfcraig_local_settings, to avoid duplicates.

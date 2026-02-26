@@ -6,11 +6,8 @@ remote_smtp_dkim:
   tls_verify_hosts = *
   tls_verify_certificates = /etc/ssl/certs/ca-certificates.crt
 
-  tls_certificate = /etc/exim4/certs/$${sender_address_domain}/cert.pem
-  tls_privatekey  = /etc/exim4/certs/$${sender_address_domain}/key.pem
-
-  dkim_domain      = $${sender_address_domain}
-  dkim_selector    = mail
-  dkim_private_key = ${dkim_base}/$${sender_address_domain}/private.key
+  dkim_domain      = $${lookup{$$sender_address_domain}lsearch{${dkim_base}/keymap}}
+  dkim_selector    = ${dkim_selector}
+  dkim_private_key = $${lookup{$$sender_address_domain}lsearch{${dkim_base}/keymap}{${dkim_base}/$$value/private.key}{}}
   dkim_canon       = relaxed
   dkim_sign_headers = Date:From:To:Subject:Message-ID:Content-Type
