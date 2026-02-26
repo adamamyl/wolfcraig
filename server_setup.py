@@ -221,10 +221,20 @@ def configure_exim(config: dict[str, object], dry_run: bool, force: bool) -> Non
     template_map = {
         "00_local_settings.tpl": EXIM_CONF_D / "main" / "00_wolfcraig_local_settings",
         "30_smtp_outbound.tpl": EXIM_CONF_D / "transport" / "30_wolfcraig_smtp_outbound",
-        "200_send_outbound.tpl": EXIM_CONF_D / "router" / "200_wolfcraig_send_outbound",
+        # 099_ prefix ensures this router fires before Debian's 200_exim4-config_primary,
+        # which would otherwise win the alphabetical race and route without DKIM.
+        "200_send_outbound.tpl": EXIM_CONF_D / "router" / "099_wolfcraig_send_outbound",
     }
 
     changed = False
+
+    # Clean up old misnamed router file if present from a previous run
+    old_router = EXIM_CONF_D / "router" / "200_wolfcraig_send_outbound"
+    if not dry_run and old_router.exists():
+        old_router.unlink()
+        log.info("Removed stale router config: %s", old_router)
+        changed = True
+
     for tpl_name, dst in template_map.items():
         tpl_path = EXIM_TEMPLATES / tpl_name
         stamped = _stamp_template(tpl_path, variables)
@@ -243,6 +253,20 @@ def configure_exim(config: dict[str, object], dry_run: bool, force: bool) -> Non
         else:
             log.info("[dry-run] would write %s", dst)
         changed = True
+
+    # Ensure Exim can route to external domains (not blocked by Debian's 'nonlocal' router)
+    exim_conf_conf = Path("/etc/exim4/update-exim4.conf.conf")
+    if not dry_run and exim_conf_conf.exists():
+        content = exim_conf_conf.read_text()
+        new_content = re.sub(
+            r"dc_eximconfig_configtype='[^']*'",
+            "dc_eximconfig_configtype='internet'",
+            content,
+        )
+        if new_content != content:
+            exim_conf_conf.write_text(new_content)
+            log.info("Set dc_eximconfig_configtype='internet' in %s", exim_conf_conf)
+            changed = True
 
     if changed and not dry_run:
         if not _validate_assembled_exim_config():
@@ -518,7 +542,7 @@ def send_test_emails(config: dict[str, object], dry_run: bool) -> None:
     for entry in mail_domains:
         domain = str(entry["domain"])
         from_addr = f"test@{domain}"
-        to_addr = f"test@{domain}"
+        to_addr = f"adam@{domain}"
 
         if dry_run:
             log.info("[dry-run] would send test email from %s", from_addr)
