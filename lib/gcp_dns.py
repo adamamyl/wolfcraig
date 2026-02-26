@@ -47,8 +47,9 @@ def get_zone(client: gcp_dns.Client, domain: str) -> gcp_dns.ManagedZone:
 
 
 def _normalise_txt(rrdatas: list[str]) -> str:
-    joined = " ".join(rrdatas)
-    return joined.replace('"', "").replace(" ", "")
+    # Sort rrdatas so comparison is order-insensitive (GCP may return them in any order).
+    parts = sorted(r.replace('"', "").replace(" ", "") for r in rrdatas)
+    return "".join(parts)
 
 
 def record_needs_update(zone: gcp_dns.ManagedZone, record: DnsRecord) -> bool:
@@ -138,15 +139,25 @@ def wait_for_propagation(
 
 
 def fetch_existing_spf(zone: gcp_dns.ManagedZone, domain: str) -> list[str]:
+    """Return SPF mechanisms from the apex TXT RRset, excluding qualifiers."""
     apex = f"{domain.rstrip('.')}."
     for existing in zone.list_resource_record_sets():
         if existing.name == apex and existing.record_type == "TXT":
-            # Strip GCP TXT record quotes from each chunk and join with space to parse tokens.
-            # (_normalise_txt removes all spaces and is for comparison only, not parsing.)
-            raw = " ".join(r.strip('"') for r in existing.rrdatas)
-            if raw.startswith("v=spf1"):
-                parts = raw.split()
-                return [p for p in parts if p not in ("v=spf1", "-all", "~all", "+all", "?all")]
+            # Each rrdata is a separate TXT string — find only the SPF one.
+            for rrdata in existing.rrdatas:
+                raw = rrdata.strip('"')
+                if raw.startswith("v=spf1"):
+                    parts = raw.split()
+                    return [p for p in parts if p not in ("v=spf1", "-all", "~all", "+all", "?all")]
+    return []
+
+
+def fetch_existing_non_spf_rrdatas(zone: gcp_dns.ManagedZone, domain: str) -> list[str]:
+    """Return all non-SPF TXT rrdatas at the apex, to preserve alongside updated SPF."""
+    apex = f"{domain.rstrip('.')}."
+    for existing in zone.list_resource_record_sets():
+        if existing.name == apex and existing.record_type == "TXT":
+            return [r for r in existing.rrdatas if not r.strip('"').startswith("v=spf1")]
     return []
 
 
@@ -191,13 +202,16 @@ def build_records_for_domain(
     if domain_config.get("mail"):
         existing_mechanisms = fetch_existing_spf(zone, domain)
         spf_value = build_spf_record(existing_mechanisms, server_ipv4, server_ipv6)
+        # Preserve non-SPF TXT rrdatas at the apex (e.g. google-site-verification).
+        non_spf = fetch_existing_non_spf_rrdatas(zone, domain)
+        apex_txt = [f'"{spf_value}"'] + non_spf
 
         records += [
             DnsRecord(
                 f"{domain}.",
                 "TXT",
                 DEFAULT_TTL,
-                [f'"{spf_value}"'],
+                apex_txt,
             ),
             DnsRecord(
                 f"{DKIM_SELECTOR}._domainkey.{domain}.",
@@ -209,7 +223,7 @@ def build_records_for_domain(
                 f"_dmarc.{domain}.",
                 "TXT",
                 DEFAULT_TTL,
-                [f'"v=DMARC1; p=reject; rua=mailto:dmarc@{domain}; adkim=s; aspf=s"'],
+                [f'"v=DMARC1; p=reject; pct=100; rua=mailto:dmarc@{domain}; adkim=s; aspf=s"'],
             ),
             DnsRecord(
                 f"_mta-sts.{domain}.",

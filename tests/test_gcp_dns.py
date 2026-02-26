@@ -15,6 +15,7 @@ from lib.gcp_dns import (
     _split_dkim_rrdata,
     build_records_for_domain,
     build_spf_record,
+    fetch_existing_non_spf_rrdatas,
     fetch_existing_spf,
     record_needs_update,
     upsert_record,
@@ -236,10 +237,75 @@ def test_fetch_existing_spf_returns_mechanisms() -> None:
     assert "include:_spf.google.com" in mechanisms
 
 
+def test_fetch_existing_spf_ignores_non_spf_rrdatas() -> None:
+    """SPF parser must not bleed google-site-verification into SPF mechanisms."""
+    spf_record = MagicMock()
+    spf_record.name = "example.test."
+    spf_record.record_type = "TXT"
+    spf_record.rrdatas = [
+        '"v=spf1 include:_spf.google.com ~all"',
+        '"google-site-verification=abc123"',
+    ]
+    zone = MagicMock()
+    zone.list_resource_record_sets.return_value = [spf_record]
+
+    mechanisms = fetch_existing_spf(zone, "example.test")
+    assert "include:_spf.google.com" in mechanisms
+    assert not any("google-site-verification" in m for m in mechanisms)
+
+
 def test_fetch_existing_spf_returns_empty_when_no_record() -> None:
     zone = _make_zone()
     mechanisms = fetch_existing_spf(zone, "example.test")
     assert mechanisms == []
+
+
+def test_fetch_existing_non_spf_rrdatas_returns_others() -> None:
+    spf_record = MagicMock()
+    spf_record.name = "example.test."
+    spf_record.record_type = "TXT"
+    spf_record.rrdatas = [
+        '"v=spf1 include:_spf.google.com ~all"',
+        '"google-site-verification=abc123"',
+    ]
+    zone = MagicMock()
+    zone.list_resource_record_sets.return_value = [spf_record]
+
+    non_spf = fetch_existing_non_spf_rrdatas(zone, "example.test")
+    assert non_spf == ['"google-site-verification=abc123"']
+
+
+def test_apex_txt_preserves_non_spf_rrdatas() -> None:
+    """google-site-verification must appear as a separate rrdata, not inside SPF."""
+    existing = DnsRecord(
+        "example.test.",
+        "TXT",
+        300,
+        ['"v=spf1 include:_spf.google.com ~all"', '"google-site-verification=abc123"'],
+    )
+    zone = _make_zone([existing])
+    config = _make_domain_config()
+
+    records = build_records_for_domain(config, "1.2.3.4", "::1", "key==", "id", zone)
+
+    apex = [r for r in records if r.name == "example.test." and r.record_type == "TXT"]
+    assert len(apex) == 1
+    rrdatas = apex[0].rrdatas
+    spf_rdatas = [r for r in rrdatas if "v=spf1" in r]
+    other_rdatas = [r for r in rrdatas if "google-site-verification" in r]
+    assert len(spf_rdatas) == 1
+    assert len(other_rdatas) == 1
+    # google-site-verification must NOT appear inside the SPF rrdata
+    assert "google-site-verification" not in spf_rdatas[0]
+
+
+def test_dmarc_includes_pct100() -> None:
+    config = _make_domain_config()
+    zone = _make_zone()
+    records = build_records_for_domain(config, "1.2.3.4", "::1", "key==", "id", zone)
+    dmarc = [r for r in records if "_dmarc" in r.name]
+    assert len(dmarc) == 1
+    assert "pct=100" in dmarc[0].rrdatas[0]
 
 
 def test_build_spf_record_appends_ips() -> None:
