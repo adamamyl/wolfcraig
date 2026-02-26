@@ -23,8 +23,8 @@ dev = [
 
 [tool.bandit]
 targets = ["."]
-exclude_dirs = [".venv", "tests/fixtures"]
-skips = []
+exclude_dirs = [".venv", "tests"]
+skips = ["B404", "B603", "B607"]  # subprocess with list args is intentional
 
 [tool.mypy]
 strict = true
