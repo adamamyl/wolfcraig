@@ -306,7 +306,7 @@ def configure_caddy(ghost_compose_path: str, dry_run: bool, force: bool) -> None
     caddy_dir = Path(ghost_compose_path) / "caddy"
     sites_dst = caddy_dir / "sites"
     caddyfile = caddy_dir / "Caddyfile"
-    import_line = "import caddy/sites/*\n"
+    import_line = "import sites/*\n"
     marker = "# wolfcraig: import sites"
     marker_line = f"{marker}\n{import_line}"
 
