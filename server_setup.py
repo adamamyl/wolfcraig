@@ -256,8 +256,18 @@ def configure_exim(config: dict[str, object], dry_run: bool, force: bool) -> Non
 
     # Write DKIM domain keymap — lsearch lookup untaints $sender_address_domain in transport.
     # Exim 4.94+ treats header-derived values as tainted; file lookup results are trusted.
+    # Also map wolfmail.{domain} → {domain} so local envelope senders (primary_hostname) resolve
+    # to the correct DKIM key when mailsubdomain is set.
     dkim_keymap = EXIM_DKIM / "keymap"
-    keymap_content = "".join(f"{d}: {d}\n" for d in mail_domains)
+    keymap_lines: list[str] = []
+    for entry in domains_list:
+        if not entry.get("mail"):
+            continue
+        domain = str(entry["domain"])
+        keymap_lines.append(f"{domain}: {domain}\n")
+        if entry.get("mailsubdomain"):
+            keymap_lines.append(f"{MAIL_HOST_PREFIX}.{domain}: {domain}\n")
+    keymap_content = "".join(keymap_lines)
     if dry_run:
         log.info("[dry-run] would write %s", dkim_keymap)
     elif not dkim_keymap.exists() or dkim_keymap.read_text() != keymap_content:

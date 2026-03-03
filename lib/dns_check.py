@@ -139,7 +139,7 @@ def check_domain(
             (
                 "v=DMARC1",
                 f"_dmarc.{domain}",
-                f"v=DMARC1; p=reject; pct=100; rua=mailto:dmarc@{domain}; adkim=s; aspf=s",
+                f"v=DMARC1; p=reject; pct=100; rua=mailto:dmarc@{domain}; adkim=s; aspf=r",
             ),
             ("v=STSv1", f"_mta-sts.{domain}", f"v=STSv1; id={sts_id}"),
             (
