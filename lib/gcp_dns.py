@@ -223,7 +223,7 @@ def build_records_for_domain(
                 f"_dmarc.{domain}.",
                 "TXT",
                 DEFAULT_TTL,
-                [f'"v=DMARC1; p=reject; pct=100; rua=mailto:dmarc@{domain}; adkim=s; aspf=s"'],
+                [f'"v=DMARC1; p=reject; pct=100; rua=mailto:dmarc@{domain}; adkim=s; aspf=r"'],
             ),
             DnsRecord(
                 f"_mta-sts.{domain}.",
