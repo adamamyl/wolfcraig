@@ -329,7 +329,7 @@ def test_build_spf_record_no_ipv6_when_empty() -> None:
 
 def test_wait_for_propagation_returns_true_on_match() -> None:
     mock_rdata = MagicMock()
-    mock_rdata.__str__ = MagicMock(return_value="1.2.3.4")
+    mock_rdata.__str__ = MagicMock(return_value="1.2.3.4")  # type: ignore[method-assign]
     mock_answers = MagicMock()
     mock_answers.__iter__ = MagicMock(return_value=iter([mock_rdata]))
 

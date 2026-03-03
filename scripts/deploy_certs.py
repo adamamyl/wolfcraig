@@ -12,7 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import docker as docker_sdk  # type: ignore[import-untyped]
+import docker as docker_sdk
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

@@ -8,7 +8,7 @@ from typing import NamedTuple
 
 import dns.exception
 import dns.resolver
-from google.cloud import dns as gcp_dns  # type: ignore[import-untyped]
+from google.cloud import dns as gcp_dns
 from google.oauth2 import service_account
 
 from lib.constants import DKIM_SELECTOR, MAIL_HOST_PREFIX

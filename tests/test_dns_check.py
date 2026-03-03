@@ -113,7 +113,7 @@ def test_query_address_returns_none_on_no_answer() -> None:
 
 def test_query_address_returns_ip_on_success() -> None:
     mock_rdata = MagicMock()
-    mock_rdata.__str__ = MagicMock(return_value="1.2.3.4")
+    mock_rdata.__str__ = MagicMock(return_value="1.2.3.4")  # type: ignore[method-assign]
     mock_answers = MagicMock()
     mock_answers.__getitem__ = MagicMock(return_value=mock_rdata)
 
@@ -193,7 +193,7 @@ def test_check_domain_missing_status_on_nxdomain() -> None:
 def test_mismatch_status_on_wrong_ip() -> None:
     config = _make_domain_config(mail=False)
     mock_rdata = MagicMock()
-    mock_rdata.__str__ = MagicMock(return_value="9.9.9.9")
+    mock_rdata.__str__ = MagicMock(return_value="9.9.9.9")  # type: ignore[method-assign]
     mock_answers = MagicMock()
     mock_answers.__getitem__ = MagicMock(return_value=mock_rdata)
 
@@ -221,7 +221,7 @@ def test_result_serialises_to_dict() -> None:
     d = result.to_dict()
     assert json.dumps(d)
     assert d["domain"] == "example.test"
-    assert d["records"][0]["status"] == "ok"
+    assert d["records"][0]["status"] == "ok"  # type: ignore[index]
 
 
 def test_copy_paste_output_has_trailing_dots(capsys: pytest.CaptureFixture[str]) -> None:
@@ -252,7 +252,7 @@ def test_warning_logged_on_dns_exception(caplog: pytest.LogCaptureFixture) -> No
         caplog.at_level(logging.WARNING),
         patch(
             "lib.dns_check.dns.resolver.resolve",
-            side_effect=dns.exception.DNSException("timeout"),
+            side_effect=dns.exception.DNSException("timeout"),  # type: ignore[no-untyped-call]
         ),
     ):
         result = _query_address("example.test", "A")
